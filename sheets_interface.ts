@@ -26,17 +26,42 @@ class SheetValues {
 	data: (string | number | boolean | Date)[][];
 	boundThings: (BoundSingleValue | BoundArray)[];
 	formulas: string[][];
+	arrayFormulasProtection: boolean;
+	volatileCells: boolean[][];
 
-	constructor(sheet: GoogleAppsScript.Spreadsheet.Sheet){
+	constructor(sheet: GoogleAppsScript.Spreadsheet.Sheet, arrayFormulasProtection = false){
 		this.sheet = sheet;
+		this.boundThings = [];
+		this.volatileCells = [];
+		this.arrayFormulasProtection = arrayFormulasProtection;
+
 		let range = sheet.getRange(1,1, sheet.getMaxRows(), sheet.getMaxColumns());
 		this.data = range.getValues();
 		this.formulas = range.getFormulas();
-		this.boundThings = [];
+		if (arrayFormulasProtection){
+			let spreadsheet = sheet.getParent()
+			let id = spreadsheet.getId();
+			let rangeNotation = sheet.getName() +'!' + range?.getA1Notation();
+			let values = Sheets.Spreadsheets?.Values?.get(id, rangeNotation, {valueRenderOption: "FORMULA"}).values as any[][];
+			this.volatileCells = this.getVolatileCells(this.data, values);
+		}
+	}
 
-		console.log('formulas', this.formulas);
-		console.log('data', this.data);
-		console.log('displayValue', range.getDisplayValues())
+	getVolatileCells(data: any[][], formulaData: any[][] ): boolean[][]{
+		let volatile: boolean[][]= []
+		for (let r=0; r<data.length; r++){
+			let row: boolean[] = []
+			data[r].forEach( (e,i) => {
+				if (e==""){row.push(false); return}
+				if (formulaData.length-1<r || formulaData[r].length-1<i || formulaData[r][i] != e){
+					row.push(true);
+				} else {
+					row.push(false)
+				}
+			})
+			volatile.push(row);
+		}
+		return volatile
 	}
 
 	find (whatToFind: (string | number | Date), rowOffset: number = 0, columnOffset: number = 0): ([number, number] | undefined) {
@@ -49,7 +74,7 @@ class SheetValues {
 			}
 		}
 		return undefined
-		
+
 	}
 
 	readValue(row: number, column: number): (string | number | Date | boolean | undefined) {
@@ -119,11 +144,18 @@ class SheetValues {
 
 	writeToFile(){
 
-		this.boundThings.forEach(element => { element.record()
-			//console.log('element recording');
-		});
+		this.boundThings.forEach(element => { element.record()});
 
-		// console.log('updated data', this.data)
+		if (this.arrayFormulasProtection){
+			//console.log('this.volatileCells', this.volatileCells)
+			for (let r=0; r<this.volatileCells.length; r++){
+				this.volatileCells[r].forEach((e,i) => {
+					if (e){
+						this.data[r][i] = '';
+					}
+				})
+			}
+		}
 
 		for (let r=0; r<this.formulas.length; r++){
 			for (let c=0; c<this.formulas[r].length; c++){
@@ -135,7 +167,7 @@ class SheetValues {
 
 		let range = this.sheet.getRange(1,1,this.data.length,this.data[0].length);
 		range.setValues(this.data);
-	
+
 	}
 
 	addColumn(amount: number = 1){
@@ -183,7 +215,7 @@ class SheetValues {
 		}
 		reader.move(direction);
 		let boundObjectArray: BoundObject[] = [];
-		
+
 		while (!reader.isEmpty()){
 			//console.log('reader state', reader.read())
 			boundObjectArray.push(this.createBoundObject(valueMap))
@@ -199,14 +231,14 @@ class BoundSingleValue {
 
 	_data: SheetValues;
 	_reference: [number, number];
-	v: any;	
-	
+	v: any;
+
 	record(){
 		this._data.writeValue(this.v,  this._reference[0], this._reference[1]);
 	}
 
 	constructor(data: SheetValues, reference: [number, number]){
-		
+
 		this._data = data;
 		this._reference = reference;
 		this.v = data.readValue(reference[0], reference[1]);
@@ -245,13 +277,13 @@ class BoundArray {
 	}
 
 	record(){
-		//TODO: take care of previous leftover if any
 		let writer = this._data.createWriter(this._firstCellReference[0], this._firstCellReference[1])
-		
+
 		if (this.v.length < this._originalLength){
+			console.log('clearing old array')
 			writer.clearArray(this._direction, this._originalLength);
 		}
-		
+
 		writer.writeArray(this.v, this._direction);
 	}
 
@@ -407,7 +439,7 @@ class Reader {
 			throw new Error ('Wrong row read direction')
 		}
 		return this.readArray(direction)
-		
+
 	}
 
 	getPos(): [number, number]{
@@ -598,7 +630,7 @@ class Writer extends Reader {
 		} else {
 			return this.writeArray(values, direction);
 		}
-		
+
 	}
 
 	writeColumn(values: any[], direction: ValueMapDirection = ValueMapDirection.Down){
@@ -619,7 +651,7 @@ class Writer extends Reader {
 		this.recall(rectMark);
 		this.clearMark(rectMark);
 		return this;
-		
+
 	}
 
 	//TODO writeMove, moveWrite, readMove, moveRead might need another look, it is to close to just chaining methods.
@@ -630,7 +662,7 @@ class Writer extends Reader {
 		this.mark(arrayMark);
 		this.setDirection(direction);
 		let i = 0;
-		while(this.isValid() && distance == 0 || this.isValid() && distance < i){
+		while(this.isValid() && distance == 0 || this.isValid() && i < distance){
 			this.writeMove("");
 			i += 1;
 		}

@@ -1,6 +1,13 @@
 {
   "timeZone": "Europe/Kyiv",
   "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Sheets",
+        "version": "v4",
+        "serviceId": "sheets"
+      }
+    ]
   },
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8"
