@@ -472,7 +472,7 @@ class Reader {
 	}
 
 	isEmpty(rowOffset: number = 0, columnOffset: number = 0){
-		if (!this.isValid(rowOffset, columnOffset) || this.read(rowOffset, columnOffset) == ''){
+		if (!this.isValid(rowOffset, columnOffset) || this.read(rowOffset, columnOffset) === ''){
 			return true
 		}
 		return false
@@ -684,6 +684,15 @@ class Writer extends Reader {
 			throw new Error("wrong direction for clear Column");
 		}
 		return this.clearArray(direction);
+	}
+
+	add(amount: number){
+		let current = this.read();
+		if (typeof(current) != "number" || typeof(amount) != "number"){
+			throw new Error("can't add non numeric values")
+		}
+		this.write(current+amount);
+		return this;
 	}
 
 }
